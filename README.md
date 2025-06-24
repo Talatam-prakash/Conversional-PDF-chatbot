@@ -28,7 +28,7 @@ This project is a web-based chatbot that allows users to upload a PDF and ask qu
 ## 🚀 Getting Started
 
 ### 1. Clone the Repository
-```bash
+
 git clone https://github.com/your-username/conversational-pdf-chatbot.git
 cd conversational-pdf-chatbot
 
