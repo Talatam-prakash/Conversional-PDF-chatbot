@@ -31,3 +31,34 @@ This project is a web-based chatbot that allows users to upload a PDF and ask qu
 ```bash
 git clone https://github.com/your-username/conversational-pdf-chatbot.git
 cd conversational-pdf-chatbot
+
+
+#### 2.Create a Virtual Environment
+
+- python -m venv venv
+- source venv/bin/activate 
+
+### 3. Install Required Libraries
+
+- pip install -r requirements.txt
+
+
+### 4. Add Your Environment Variables
+- Create a .env file in the root directory and add:
+
+
+### Running the App
+- To start the app locally, run:
+
+- streamlit run app.py
+- Then, open the URL shown in your terminal (usually http://localhost:8501).
+
+
+
+### Project Structure
+
+conversational-pdf-chatbot/
+├── app.py
+├── requirements.txt
+├── .env
+├── README.md
