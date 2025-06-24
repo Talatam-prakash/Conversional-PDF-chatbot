@@ -58,7 +58,8 @@ cd conversational-pdf-chatbot
 ### Project Structure
 
 conversational-pdf-chatbot/
-├── app.py
-├── requirements.txt
-├── .env
-├── README.md
+├── app.py               
+├── requirements.txt     
+├── .env                
+├── README.md           
+
