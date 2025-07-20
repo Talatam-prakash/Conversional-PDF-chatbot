@@ -1,20 +1,32 @@
-name: Sync to Hugging Face hub
+name: Deploy to Hugging Face Spaces
+
 on:
   push:
-    branches: [main]
-
-  # to run this workflow manually from the Actions tab
-  workflow_dispatch:
+    branches:
+      - main  # Or whichever branch you want to deploy from
 
 jobs:
-  sync-to-hub:
+  deploy-to-hub:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      # Step 1: Checkout your repository code
+      - name: Checkout
+        uses: actions/checkout@v3
         with:
-          fetch-depth: 0
-          lfs: true
-      - name: Push to hub
+          fetch-depth: 0 # Fetches all history for all branches and tags
+
+      # Step 2: Push to your Hugging Face Space
+      # This step uses the HF_TOKEN secret to authenticate
+      - name: Push to Hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push https://PrakashLLM:$HF_TOKEN@huggingface.co/spaces/PrakashLLM/Conversional_PDF_chatbot main
+        run: |
+          git config --global user.email "hf-actions@github.com"
+          git config --global user.name "HF Actions"
+          
+          # Add the Hugging Face Space as a remote repository
+          # The URL format includes your HF username and the secret token for authentication
+          git remote add space https://PrakashLLM:${HF_TOKEN}@huggingface.co/spaces/PrakashLLM/Conversional_PDF_chatbot
+          
+          # Push the main branch to the Hugging Face Space remote
+          git push --force space main
