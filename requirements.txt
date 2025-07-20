@@ -18,3 +18,4 @@ networkx
 pyvis
 tqdm
 sentence-transformers
+pysqlite3-binary
