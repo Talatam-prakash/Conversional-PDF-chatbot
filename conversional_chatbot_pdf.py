@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 # load the environment variables
 load_dotenv()
-
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Add this function at the top of your file, after imports
 def validate_file_size(uploaded_file, max_size_mb=10):
     """Validate if the uploaded file is within size limit"""
