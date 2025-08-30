@@ -1,6 +1,3 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -20,6 +17,14 @@ from dotenv import load_dotenv
 
 # load the environment variables
 load_dotenv()
+
+# Add this function at the top of your file, after imports
+def validate_file_size(uploaded_file, max_size_mb=10):
+    """Validate if the uploaded file is within size limit"""
+    file_size = len(uploaded_file.getvalue()) / (1024 * 1024)  # Size in MB
+    return file_size <= max_size_mb
+
+
 os.environ['HF_TOKEN'] = os.getenv("HF_TOKEN")
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -32,28 +37,71 @@ with st.sidebar:
     st.header("Authentication")
     api_key = st.text_input("Enter your Groq API Key:", type="password")
     session_id = st.text_input("Session ID", value="Default Session")
-    model_name = st.selectbox(
-    "Select Groq Model",
-    ["llama3-8b-8192", "llama3-70b-8192", "Gemma2-9b-It"]
-)
+    temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
 
+if api_key and not api_key.startswith("gsk_"):
+    st.error("Invalid Groq API key format. Please check your API key.")
+    st.stop()
+elif api_key:
+    llm = ChatGroq(groq_api_key=api_key, model_name="llama3-70b-8192", temperature=temperature)
+    uploaded_files = st.file_uploader("Upload PDF Files", type="pdf", accept_multiple_files=True)
 
-if api_key:
-    llm = ChatGroq(groq_api_key=api_key, model_name=model_name)
-    uploaded_file = st.file_uploader(" Upload a PDF File", type="pdf")
+    if uploaded_files:
+        # Add a progress bar for overall processing
+        progress_bar = st.progress(0)
+        processed_files = []
+        all_documents = []
 
-    if uploaded_file:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_pdf_path = tmp_file.name
+        for idx, uploaded_file in enumerate(uploaded_files):
 
-        # load the PDF content using pdf loader
-        loader = PyPDFLoader(tmp_pdf_path)
-        documents = loader.load()
+            if not validate_file_size(uploaded_file):
+                st.error(f"File {uploaded_file.name} exceeds 10MB limit. Skipping.")
+                st.stop()
 
-        # chunking the context
+            with st.spinner(f"Processing {uploaded_file.name}..."):
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                    tmp_file.write(uploaded_file.getvalue())
+                    tmp_pdf_path = tmp_file.name
+
+                # Load the PDF content using pdf loader
+                loader = PyPDFLoader(tmp_pdf_path)
+                documents = loader.load()
+
+                # Add source metadata to each document
+                for doc in documents:
+                    doc.metadata["source_file"] = uploaded_file.name
+                    doc.metadata["page_number"] = doc.metadata.get("page", 0) + 1
+
+                all_documents.extend(documents)
+                processed_files.append(tmp_pdf_path)
+                
+                # Update progress bar
+                progress_bar.progress((idx + 1) / len(uploaded_files))
+        
+        # Chunk all documents together
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
-        splits = text_splitter.split_documents(documents)
+        splits = text_splitter.split_documents(all_documents)
+
+        
+        with st.sidebar:
+            st.subheader(" Document Statistics")
+            st.write(f"Number of PDFs: {len(uploaded_files)}")
+            
+            # Group documents by source file
+            file_stats = {}
+            for doc in all_documents:
+                filename = doc.metadata["source_file"]
+                if filename not in file_stats:
+                    file_stats[filename] = {"pages": set()}
+                file_stats[filename]["pages"].add(doc.metadata["page_number"])
+            
+            # Display stats for each file
+            for filename, stats in file_stats.items():
+                with st.expander(f"📄 {filename}"):
+                    st.write(f"Pages: {len(stats['pages'])}")
+
+        
+
 
         # embedding the context and store in vector database
         @st.cache_resource
@@ -65,7 +113,10 @@ if api_key:
             )
 
         vectorstore = get_vectorstore(splits)
-
+        
+        # Add this after vectorstore creation
+        
+            
         retriever = vectorstore.as_retriever()
 
         # Prompt for context
@@ -88,11 +139,17 @@ if api_key:
         # System prompt
         qa_prompt = ChatPromptTemplate.from_messages([
             ("system", """
-                You are an assistant for a question-answering task.
-                Use the following context to answer the question:
-                {context}
-                If the question is not answerable based on the context, respond:
-                'Your query is not related to the PDF context.'
+                You are a helpful AI assistant for answering questions strictly based on the provided PDF context.
+                Rules:
+                1. Use ONLY the information from {context}.
+                2. If the answer is not present in {context}, respond exactly:
+                "Your query is not related to the PDF context."
+                3. If the user asks something irrelevant to the PDF, respond exactly:
+                "Your query is not related to the PDF context."
+                4. If the user asks anything violent, harmful, hateful, illegal, sexual, or unsafe, respond exactly:
+                "I cannot respond to that type of request."
+                5. Never guess, assume, or use outside knowledge — stay within the provided context.
+                6. If multiple pieces of context are provided, combine them logically but without adding new facts.
                 """)
 ,
             MessagesPlaceholder(variable_name="chat_history"),
@@ -142,7 +199,12 @@ if api_key:
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
-        # Clean up temporary file
-        os.remove(tmp_pdf_path)
+        if "tmp_pdf_path" in locals():
+                    try:
+                        for tmp_path in processed_files:
+                            if os.path.exists(tmp_path):
+                                os.remove(tmp_path)
+                    except Exception as e:
+                        st.warning(f"Error cleaning up temporary files: {e}")
 else:
     st.info("Please enter your Groq API Key in the sidebar to continue.")
